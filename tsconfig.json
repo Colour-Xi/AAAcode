@@ -1,0 +1,49 @@
+// {
+
+//     "compilerOptions": {
+//         "target": "ES6",
+//         "module": "CommonJS",
+//         "outDir": "./dist",
+//         "rootDir": "./src",
+//         "strict": true,
+//         "noImplicitAny": true,
+//         "strictNullChecks": true,
+//         "strictFunctionTypes": true,
+//         "strictPropertyInitialization": true,
+//         "noImplicitThis": true,
+//         "alwaysStrict": true,
+//         "noUnusedLocals": true,
+//         "noUnusedParameters": true,
+//         "noImplicitReturns": true,
+//         "noFallthroughCasesInSwitch": true,
+//         "moduleResolution": "Node",
+//         "ignoreDeprecations": "6.0",
+//         "esModuleInterop": true,
+//         "skipLibCheck": true,
+//         "forceConsistentCasingInFileNames": true,
+//         "resolveJsonModule": true
+//     },
+//     "include": [
+//         "./src/**/*"
+//     ],
+//     "exclude": [
+//         "node_modules",
+//         "**/*.test.ts"
+//     ]
+// }
+
+// tsconfig.json
+{
+  "compilerOptions": {
+    "lib": ["ES2019", "DOM", "ES2024"],
+    "target": "ES6", // 目标 JS 版本
+    "module": "ESNext", // 输出 ES 模块（供 Rollup 处理）
+   // "outDir": "dist", // TS 编译后的临时目录（可选）
+    "rootDir": "src", // 源码目录
+    "strict": true, // 严格模式
+    "esModuleInterop": true, // 兼容 CommonJS 和 ES 模块
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*"], // 包含所有 TS 文件
+  "exclude": ["node_modules"]
+}

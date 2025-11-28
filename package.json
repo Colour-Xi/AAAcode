@@ -1,0 +1,24 @@
+{
+   "type": "module",
+   "name": "screeps-ts",
+   "version": "1.0.0",
+   "description": "这是一个使用TypeScript编写的Screeps AI项目，提供了基本的角色管理和行为逻辑框架。",
+   "main": "index.js",
+   "scripts": {
+      "build": "rollup -c rollup.config.mjs",
+      "test": "echo \"Error: no test specified\" && exit 1"
+   },
+   "keywords": [],
+   "author": "",
+   "license": "ISC",
+   "devDependencies": {
+      "@rollup/plugin-commonjs": "^29.0.0",
+      "@rollup/plugin-node-resolve": "^16.0.3",
+      "@rollup/plugin-typescript": "^12.3.0",
+      "@types/lodash": "^3.10.1",
+      "@types/screeps": "^3.3.8",
+      "rollup": "^4.53.1",
+      "tslib": "^2.8.1",
+      "typescript": "^5.9.3"
+   }
+}

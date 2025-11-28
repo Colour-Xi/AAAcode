@@ -1,0 +1,11 @@
+# 排除单个文件夹
+# folder_to_exclude/
+
+# 或者使用通配符排除所有类似文件夹
+# */folder_to_exclude/
+
+# 排除所有名为 node_modules 的文件夹
+node_modules/
+
+dist.js
+dist.js.map
