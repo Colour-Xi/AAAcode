@@ -36,7 +36,7 @@ export class RoleBornner {
 
         // 补充阵亡 Creep
         this.replaceDeadCreeps();
-        
+
         // 生成新 Creep
         this.spawnCreepsByNeed();
     }
@@ -51,7 +51,7 @@ export class RoleBornner {
 
         // 获取当前 Creep 数量统计
         const creepCounts = this.getCreepCounts();
-        
+
         // 按优先级生成 Creep
         if (creepCounts.harvester < this.getRequiredCount('harvester')) {
             this.createCreep(availableSpawn, 'harvester');
@@ -68,8 +68,8 @@ export class RoleBornner {
      * 获取可用的 spawn
      */
     private getAvailableSpawn(): StructureSpawn | null {
-        return this.spawns.find(spawn => 
-            !spawn.spawning && 
+        return this.spawns.find(spawn =>
+            !spawn.spawning &&
             this.getRoomEnergy() >= getMinEnergyByRole('harvester')
         ) || null;
     }
@@ -86,7 +86,7 @@ export class RoleBornner {
      */
     private getCreepCounts(): Record<string, number> {
         const creeps = Object.values(Game.creeps).filter(c => c.memory.roomName === this.roomName);
-        
+
         return {
             harvester: creeps.filter(c => c.memory.role === 'harvester').length,
             builder: creeps.filter(c => c.memory.role === 'builder').length,
@@ -102,7 +102,7 @@ export class RoleBornner {
     private getRequiredCount(role: string): number {
         const controllerLevel = this.room.controller?.level || 1;
         const sourceCount = this.room.memory.sources?.length || 1;
-        
+
         switch (role) {
             case 'harvester':
                 return Math.max(2, sourceCount * 2);
@@ -133,7 +133,7 @@ export class RoleBornner {
         const energy = this.getRoomEnergy();
         const body = getOptimalBody(role, energy);
         const name = `${role}_${Game.time}`;
-        
+
         const result = spawn.spawnCreep(body, name, {
             memory: {
                 role: role,
@@ -141,7 +141,8 @@ export class RoleBornner {
                 working: false,
                 sourceId: '',
                 spawnTime: Game.time,
-                bornTime: Game.time + this.bornTime(body), // 孵化完成时间
+                // bornTime: Game.time + this.bornTime(body), // 孵化完成时间
+                bornTime: Game.time + body.length * 3,
                 workMode: role // 工作模式初始化为角色名
             }
         });

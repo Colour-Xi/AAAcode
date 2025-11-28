@@ -50,7 +50,6 @@ RoomPlanner负责将核心中心点保存到Memory中，并建造围墙和资源
 
 加了一点数据类型，声明在typedts
 
-
 harvest的id绑定相关的逻辑有待优化。跟Memory有关，可以引入Manager去干预
 
 引入了RoleBornner去计划性的生产角色
@@ -61,19 +60,6 @@ harvest的id绑定相关的逻辑有待优化。跟Memory有关，可以引入Ma
 
 将role相关的内容完善
 
+更新了bodyConfig，roleBornner等...
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-1
+memoryInit，和harvest采集逻辑
