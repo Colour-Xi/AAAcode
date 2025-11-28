@@ -1,186 +1,173 @@
-// import { StructureSpawn, Creep, BodyPartConstant } from "game/prototypes";
-// import { RESOURCE_ENERGY } from "game/constants";
+
+
+import { bodyConfigs, getMinEnergyByRole, getOptimalBody } from "../bodyConfigs";
 
 /**
- * Creep 生成器类
- * 负责根据房间需求生成不同角色的 Creep
+ * Creep 生成管理器
+ * 负责全房间 Creep 生成、角色分配和资源管理
  */
 export class RoleBornner {
-    private spawn: StructureSpawn;
+    private room: Room;
+    private spawns: StructureSpawn[];
     private roomName: string;
 
-    constructor(spawn: StructureSpawn) {
-        this.spawn = spawn;
-        this.roomName = spawn.room.name;
+    /**
+     * 初始化生成管理器
+     * @param room 目标房间
+     */
+    constructor(room: Room) {
+        this.room = room;
+        this.roomName = room.name;
+        this.spawns = room.find(FIND_MY_SPAWNS);
+
+        // // 初始化房间 source 数据（首次运行）
+        // if (!room.memory.sources) {
+
+        //     room.memory.sources = room.find(FIND_SOURCES).map(s => ({ id: s.id }));
+        // }
     }
 
     /**
-     * 检查并生成所需的 Creep
+     * 执行主逻辑（生成 + 补充）
      */
-    public spawnCreeps(): void {
-        // 获取房间内现有 Creep 数量
+    public run(): void {
+        // 无 spawn 时直接返回
+        if (this.spawns.length === 0) return;
+
+        // 补充阵亡 Creep
+        this.replaceDeadCreeps();
+        
+        // 生成新 Creep
+        this.spawnCreepsByNeed();
+    }
+
+    /**
+     * 根据房间需求生成 Creep
+     */
+    private spawnCreepsByNeed(): void {
+        // 获取可用的 spawn（未在生成且能量充足）
+        const availableSpawn = this.getAvailableSpawn();
+        if (!availableSpawn) return;
+
+        // 获取当前 Creep 数量统计
         const creepCounts = this.getCreepCounts();
         
-        // 根据角色优先级生成 Creep
-        if (creepCounts.harvester < this.getRequiredHarvesters()) {
-            this.spawnHarvester();
-        } else if (creepCounts.builder < this.getRequiredBuilders()) {
-            this.spawnBuilder();
-        } else if (creepCounts.upgrader < this.getRequiredUpgraders()) {
-            this.spawnUpgrader();
+        // 按优先级生成 Creep
+        if (creepCounts.harvester < this.getRequiredCount('harvester')) {
+            this.createCreep(availableSpawn, 'harvester');
+        } else if (creepCounts.builder < this.getRequiredCount('builder')) {
+            this.createCreep(availableSpawn, 'builder');
+        } else if (creepCounts.upgrader < this.getRequiredCount('upgrader')) {
+            this.createCreep(availableSpawn, 'upgrader');
+        } else if (creepCounts.defender < this.getRequiredCount('defender')) {
+            this.createCreep(availableSpawn, 'defender');
         }
     }
 
     /**
-     * 获取房间内各角色 Creep 数量统计
+     * 获取可用的 spawn
+     */
+    private getAvailableSpawn(): StructureSpawn | null {
+        return this.spawns.find(spawn => 
+            !spawn.spawning && 
+            this.getRoomEnergy() >= getMinEnergyByRole('harvester')
+        ) || null;
+    }
+
+    /**
+     * 获取房间总能量（spawn + extension）
+     */
+    private getRoomEnergy(): number {
+        return this.room.energyAvailable;
+    }
+
+    /**
+     * 统计当前 Creep 数量
      */
     private getCreepCounts(): Record<string, number> {
-        const creeps = Object.values(Game.creeps).filter(c => c.room.name === this.roomName);
+        const creeps = Object.values(Game.creeps).filter(c => c.memory.roomName === this.roomName);
         
         return {
             harvester: creeps.filter(c => c.memory.role === 'harvester').length,
             builder: creeps.filter(c => c.memory.role === 'builder').length,
             upgrader: creeps.filter(c => c.memory.role === 'upgrader').length,
+            defender: creeps.filter(c => c.memory.role === 'defender').length,
             total: creeps.length
         };
     }
 
     /**
-     * 获取采集者需求数量
+     * 获取各角色需求数量
      */
-    private getRequiredHarvesters(): number {
-        // 根据房间等级动态调整需求数量
-        const controllerLevel = this.spawn.room.controller?.level || 1;
-        return Math.max(2, controllerLevel);
-    }
-
-    /**
-     * 获取建造者需求数量
-     */
-    private getRequiredBuilders(): number {
-        // 有建造任务时增加建造者数量
-        const constructionSites = this.spawn.room.find(FIND_CONSTRUCTION_SITES);
-        return constructionSites.length > 0 ? 2 : 1;
-    }
-
-    /**
-     * 获取升级者需求数量
-     */
-    private getRequiredUpgraders(): number {
-        const controllerLevel = this.spawn.room.controller?.level || 1;
-        return Math.max(1, Math.floor(controllerLevel / 2));
-    }
-
-    /**
-     * 生成采集者 Creep
-     */
-    private spawnHarvester(): void {
-        const body = this.getOptimalBody('harvester');
-        const name = `Harvester_${Game.time}`;
+    private getRequiredCount(role: string): number {
+        const controllerLevel = this.room.controller?.level || 1;
+        const sourceCount = this.room.memory.sources?.length || 1;
         
-        this.spawnCreep(name, body, 'harvester');
-    }
-
-    /**
-     * 生成建造者 Creep
-     */
-    private spawnBuilder(): void {
-        const body = this.getOptimalBody('builder');
-        const name = `Builder_${Game.time}`;
-        
-        this.spawnCreep(name, body, 'builder');
-    }
-
-    /**
-     * 生成升级者 Creep
-     */
-    private spawnUpgrader(): void {
-        const body = this.getOptimalBody('upgrader');
-        const name = `Upgrader_${Game.time}`;
-        
-        this.spawnCreep(name, body, 'upgrader');
-    }
-
-    /**
-     * 根据角色获取最优身体部件配置
-     */
-    private getOptimalBody(role: string): BodyPartConstant[] {
-        const energyCapacity = this.spawn.room.energyCapacityAvailable;
-        const body: BodyPartConstant[] = [];
-        
-        // 基础部件配置（根据角色调整比例）
-        let workParts = 1;
-        let carryParts = 1;
-        let moveParts = 1;
-
-        // 根据能量容量扩展身体部件
-        if (energyCapacity >= 300) {
-            workParts = role === 'harvester' ? 2 : 3;
-            carryParts = role === 'builder' ? 2 : 1;
-            moveParts = Math.max(workParts, carryParts);
+        switch (role) {
+            case 'harvester':
+                return Math.max(2, sourceCount * 2);
+            case 'builder':
+                return this.room.find(FIND_CONSTRUCTION_SITES).length > 0 ? 2 : 1;
+            case 'upgrader':
+                return Math.max(1, Math.floor(controllerLevel / 2));
+            case 'defender':
+                return this.room.find(FIND_HOSTILE_CREEPS).length > 0 ? 2 : 0;
+            default:
+                return 1;
         }
-        
-        if (energyCapacity >= 550) {
-            workParts = role === 'harvester' ? 3 : 4;
-            carryParts = role === 'upgrader' ? 3 : 2;
-            moveParts = Math.max(workParts, carryParts);
-        }
-
-        // 构建身体数组
-        for (let i = 0; i < workParts; i++) body.push(WORK);
-        for (let i = 0; i < carryParts; i++) body.push(CARRY);
-        for (let i = 0; i < moveParts; i++) body.push(MOVE);
-
-        return body;
     }
 
     /**
-     * 执行 Creep 生成逻辑
+     * 计算 Creep 孵化完成时间
+     * @param body Creep 身体部件配置
      */
-    private spawnCreep(name: string, body: BodyPartConstant[], role: string): void {
-        // 检查生成条件
-        if (this.spawn.spawning) return;
+    private bornTime(body: BodyPartConstant[]): number {
+        // 每个身体部件孵化时间为 3 tick
+        return body.length * 3;
+    }
+
+    /**
+     * 创建指定角色的 Creep
+     */
+    private createCreep(spawn: StructureSpawn, role: string): void {
+        const energy = this.getRoomEnergy();
+        const body = getOptimalBody(role, energy);
+        const name = `${role}_${Game.time}`;
         
-        const result = this.spawn.spawnCreep(body, name, {
+        const result = spawn.spawnCreep(body, name, {
             memory: {
                 role: role,
                 roomName: this.roomName,
                 working: false,
                 sourceId: '',
-                workMode: undefined
+                spawnTime: Game.time,
+                bornTime: Game.time + this.bornTime(body), // 孵化完成时间
+                workMode: role // 工作模式初始化为角色名
             }
         });
 
         if (result === OK) {
-            console.log(`[${this.roomName}] 开始生成 ${role}: ${name}`);
+            console.log(`[${this.roomName}] 生成 ${role}: ${name} (能量: ${energy}, 身体: ${body.join(',')}, 孵化完成时间: ${Game.time + this.bornTime(body)})`);
         }
     }
 
     /**
-     * 自动补充阵亡的 Creep
+     * 补充阵亡 Creep
      */
-    public replaceDeadCreeps(): void {
-        // 检查是否有 Creep 死亡
+    private replaceDeadCreeps(): void {
         for (const name in Memory.creeps) {
             if (!Game.creeps[name]) {
-                const creepMemory = Memory.creeps[name];
-                const role = creepMemory.role;
-                
-                // 根据阵亡角色重新生成
-                switch (role) {
-                    case 'harvester':
-                        this.spawnHarvester();
-                        break;
-                    case 'builder':
-                        this.spawnBuilder();
-                        break;
-                    case 'upgrader':
-                        this.spawnUpgrader();
-                        break;
+                const mem = Memory.creeps[name];
+                if (mem.roomName === this.roomName) {
+                    // 检查是否已过孵化完成时间（避免重复生成）
+                    if (Game.time > (mem.spawnTime || 0) + 100) {
+                        const availableSpawn = this.getAvailableSpawn();
+                        if (availableSpawn) {
+                            this.createCreep(availableSpawn, mem.role);
+                        }
+                    }
+                    delete Memory.creeps[name];
                 }
-                
-                // 清理内存
-                delete Memory.creeps[name];
             }
         }
     }

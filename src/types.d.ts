@@ -1,6 +1,30 @@
 
 // 类型扩展
 declare global {
+    // 扩展Memory接口
+    interface Memory {
+        creeps: {
+            [name: string]: CreepMemory;
+        };
+        rooms: {
+            [roomName: string]: RoomMemory;
+        };
+
+
+        globalConfig: { // 全局配置
+            version: string; // 版本号
+            lastCleanup: number; // 上次清理时间戳
+            cleanupInterval: number; // 清理间隔时间(毫秒)
+            debugMode: boolean; // 调试模式开关
+            autoSpawn: boolean; // 自动孵化开关
+        };
+
+
+        uuid: number;
+        log: boolean;
+        roomPlans: any;
+    }
+
     interface CreepMemory {
         role: 'harvester' | 'upgrader' | 'builder' | string; // 新增builder角色类型
         working: boolean;
@@ -9,13 +33,15 @@ declare global {
         roomName: string;
         targetId?: string;
         sourceId?: string;//harvest绑定的资源点id
+
+        spawnTime: number;// 孵化开始时间
+        bornTime: number;// 孵化完成时间
     }
     interface RoomMemory {
-        sources: {
-            id: string;
-            containerId?: string;
-            linkId?: string;
-        }[];
+
+        config: any;// 房间配置
+
+        sources: SourceICL[];
         spawns: string[];
         controllers: string[];
         constructionSites: string[];
@@ -23,10 +49,14 @@ declare global {
         storageId?: string;
         terminalId?: string;
 
-        sourceLoad?: Record<string, number>; // 添加 sourceLoad 可选属性
+        sourceLoad?: Record<string, number>; // 资源负载均衡
+        // sourceLoad?: {
+        //     sourceId: string;
+        //     creepNum: number;
+        // }[];
         roomVisuals?: { [roomName: string]: RoomVisualData };
 
-        site: {
+        sites: { // 建筑站点
             type: BuildableStructureConstant;
             pos: {
                 x: number;
@@ -36,6 +66,11 @@ declare global {
     }
 }
 
+interface SourceICL {
+    sourceId: string;
+    containerId: string;
+    linkId: string;
+}
 
 
 
@@ -59,11 +94,6 @@ interface CreepMemory {
 
 // 扩展RoomMemory接口
 interface RoomMemory {
-    sources: {
-        id: string;
-        containerId?: string;
-        linkId?: string;
-    }[];
     spawns: string[];
     controllers: string[];
     constructionSites: string[];
@@ -83,20 +113,7 @@ interface RoomMemory {
 }
 
 
-// 扩展Memory接口
-interface Memory {
-    creeps: {
-        [name: string]: CreepMemory;
-    };
-    rooms: {
-        [roomName: string]: RoomMemory;
-    };
 
-
-    uuid: number;
-    log: boolean;
-    roomPlans: any;
-}
 
 // 角色类型定义
 type RoleType = 'harvester' | 'upgrader' | 'builder' |

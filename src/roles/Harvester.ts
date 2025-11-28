@@ -1,7 +1,7 @@
+
+
 import { Role } from "./Role";
 import { CreepUtils } from "../CreepUtils";
-import { forEach } from "lodash";
-import { MRecord } from "../types";
 
 export class Harvester extends Role {
     constructor(creep: Creep) {
@@ -9,7 +9,7 @@ export class Harvester extends Role {
     }
 
     /**
-     * 更新工作状态
+     * 更新工作状态（能量满则工作，空则采集）
      */
     protected updateWorkingStatus(): void {
         if (this.creep.memory.working && CreepUtils.isEnergyEmpty(this.creep)) {
@@ -20,203 +20,163 @@ export class Harvester extends Role {
     }
 
     /**
-     * 获取能量
-     * 根据房间内置的资源点，获取能量
-     */
-    // protected getEnergy(): void {
-    //     // 高等级采集
-    //     if (this.creep.room.controller && this.creep.room.controller.level >= 3) {
-    //         this.getEnergyHighLevel();
-    //         return;
-    //         // 跳过低级采集
-    //     }
-
-    //     // 获取sourceid群
-    //     const sourcesid = Game.rooms[this.creep.memory.roomName].memory.sources;
-    //     if (!sourcesid) {// 获取不到source
-    //         //log
-    //         return;
-    //     }
-    //     // 绑定sourceid
-    //     if (this.creep.memory.sourceId == null || this.creep.memory.sourceId === "") {
-    //         this.creep.memory.sourceId = sourcesid[0].id;
-    //     } else {
-    //         this.creep.memory.sourceId = sourcesid[1].id;
-    //     }
-
-    //     // 循环获取source
-    //         // const source: Source | null = Game.getObjectById(sid.id);
-    //         // if (source) {
-    //         //     if (this.moveToTarget(source)) {
-    //         //         this.creep.harvest(source);
-    //         //     }
-    //         // }
-    // }
-    /**
-     * 获取能量
-     * 根据房间内置的资源点，获取能量
+     * 能量采集主逻辑（区分高低级房间）
      */
     protected getEnergy(): void {
-        // 高等级采集
+        // 高级房间采集逻辑（controller等级>=3）
         if (this.creep.room.controller && this.creep.room.controller.level >= 3) {
             this.getEnergyHighLevel();
             return;
             // 跳过低级采集
         }
 
-        // 获取sourceid群
-        const sourcesid = Game.rooms[this.creep.memory.roomName].memory.sources;
-        if (!sourcesid) {// 获取不到source
-            //log
-            return;
-        }
+        // 基础房间采集逻辑
+        const room = Game.rooms[this.creep.memory.roomName];
+        const sources = room?.memory.sources;
+        if (!sources?.length) return;
 
-        // 重复使用 
-        // const _sourcesid = this.creep.memory.sourceId ;
-        // 绑定sourceid
-        if (this.creep.memory.sourceId == null || this.creep.memory.sourceId === "") {
-            this.assignSource(sourcesid);
-        }
-
-        // 验证绑定的source有效性
+        // 分配或验证能量源
         if (!this.creep.memory.sourceId) {
-            this.creep.memory.sourceId = "";
+            // this.assignSource(sources);
+             this.assignSource(sources.map(source => ({ id: source.sourceId })));
             return;
         }
 
-        // 验证source有效性
+        // 验证能量源有效性
         const source = Game.getObjectById<Source>(this.creep.memory.sourceId);
-        if (!source) {
-            this.creep.memory.sourceId = "";
+        if (!source || source.energy === 0) {
+            this.creep.memory.sourceId = ""; // 无效则重置
             return;
         }
 
         // 执行采集
-        if (source.energy > 0) {
-            if (this.moveToTarget(source)) {
-                this.creep.harvest(source);
-            }
-        } else {
-            // source枯竭时重新分配
-            this.creep.memory.sourceId = "";
+        if (this.moveToTarget(source)) {
+            this.creep.harvest(source);
         }
     }
 
     /**
-     * 为Creep分配source（负载均衡+负载上限控制）
+     * 能量源负载均衡分配
      */
-    private assignSource(sourcesid: { id: string }[]): void {
+    private assignSource(sources: { id: string }[]): void {
         const room = Game.rooms[this.creep.memory.roomName];
-        const MAX_LOAD_PER_SOURCE = 2; // 每个source的负载上限
+        if (!room) return;
 
-        // 初始化房间source负载统计
+        const MAX_LOAD_PER_SOURCE = 2; // 每个能量源最大负载
+        // 初始化负载统计
         if (!room.memory.sourceLoad) {
-            room.memory.sourceLoad = sourcesid.reduce((obj, sid) => {
-                obj[sid.id] = 0;
+            room.memory.sourceLoad = sources.reduce((obj, s) => {
+                obj[s.id] = 0;
                 return obj;
-            }, {} as MRecord<string, string, string>);
+            }, {} as Record<string, number>);
         }
 
-        // 统计当前各source的creep负载
+        // 刷新当前负载统计
         const sourceLoad = { ...room.memory.sourceLoad };
         Object.keys(sourceLoad).forEach(id => sourceLoad[id] = 0);
 
-        // 遍历房间内采集者，更新负载
-        const harvesters = Object.values(Game.creeps).filter(creep =>
-            creep.memory.role === 'harvester' &&
-            creep.memory.roomName === this.creep.memory.roomName &&
-            creep.memory.sourceId
-        );
-        harvesters.forEach(creep => {
-            const sid = creep.memory.sourceId;
-            if(!sid) {return;}
-            if (sourceLoad[sid] !== undefined) sourceLoad[sid]++;
-        });
+        // 统计当前所有采集者的能量源分配
+        Object.values(Game.creeps)
+            .filter(creep =>
+                creep.memory.role === 'harvester' &&
+                creep.memory.roomName === this.creep.memory.roomName &&
+                creep.memory.sourceId
+            )
+            .forEach(creep => {
+                const sid = creep.memory.sourceId!;
+                if (sourceLoad[sid] !== undefined) sourceLoad[sid]++;
+            });
 
-        // 选择负载最小且未达上限的source
+        // 选择负载最小且未达上限的能量源
+        let targetSourceId = sources[0].id;
         let minLoad = Infinity;
-        let targetSourceId = sourcesid[0].id;
-        sourcesid.forEach(sid => {
-            // 仅选择负载小于上限的source
-            if (sourceLoad[sid.id] < MAX_LOAD_PER_SOURCE && sourceLoad[sid.id] < minLoad) {
-                minLoad = sourceLoad[sid.id];
-                targetSourceId = sid.id;
+        sources.forEach(s => {
+            if (sourceLoad[s.id] < MAX_LOAD_PER_SOURCE && sourceLoad[s.id] < minLoad) {
+                minLoad = sourceLoad[s.id];
+                targetSourceId = s.id;
             }
         });
 
-        // 绑定source并更新全局负载
+        // 分配能量源并更新负载
         this.creep.memory.sourceId = targetSourceId;
         room.memory.sourceLoad[targetSourceId] = minLoad + 1;
     }
 
-
     /**
-     * 高级采集，找资源点旁边的container，并站在上面，获取能量。
+     * 高级能量采集（利用container）
      */
-    getEnergyHighLevel(): void {
-        // 获取container
-        const containers = this.creep.pos.lookFor(LOOK_STRUCTURES);
-        if (containers.length > 0) {
-            // 获取container
-            const container = containers[0];
-            // 移动到container
-            const isOk = this.moveToTarget(container)
-            if (isOk === true && container.pos.isEqualTo(this.creep.pos)) {//说明移动成功且位置相等
-                //采集能量
-                const sourcesid = Game.rooms[this.creep.memory.roomName].memory.sources;
-                this.creep.harvest();
+    private getEnergyHighLevel(): void {
+        // const room = Game.rooms[this.creep.memory.roomName];
+        // if (!room) return;
+
+        // 查找能量源附近的container
+
+        // 验证源有效性
+        const sourceId = this.creep.memory.sourceId;
+        if (!sourceId) return;
+
+        // 获取资源对象
+        const source = Game.getObjectById<Source>(sourceId);
 
 
+        // 获取container对象（数组第一个）
+        const container = this.creep.pos.lookFor(LOOK_STRUCTURES)
+            .filter(con => {con.structureType == STRUCTURE_CONTAINER})[0];
+        
+        // const container = source? source.pos.findInRange<StructureContainer>(FIND_STRUCTURES, 1, {
+        //         filter: s => s.structureType === STRUCTURE_CONTAINER
+        //     })[0]
+        //     : null;
 
+        // 证伪
+        if (container) {
+            // 移动到container并采集
+            if (this.moveToTarget(container) && this.creep.pos.isEqualTo(container.pos)) {
+                if (source) this.creep.harvest(source);
             }
-
+        } else {
+            // 无container时降级为基础采集
+            // this.getEnergy();
+            console.log("无container时降级为基础采集");
+            
         }
-
-        throw new Error("Method not implemented.");
     }
 
     /**
-     * 执行工作
+     * 工作主逻辑（能量转移）
      */
     protected work(): void {
-        // 高等级工作
-        if (this.creep.room.controller && this.creep.room.controller.level >= 3) {
+        if (this.creep.room.controller && this.creep.room.controller?.level >= 3) {
             this.workHighLevel();
             return;
             // 跳过低级工作
         }
 
-        // 优先填充Spawn和Extension
-        const spawns_extensions = this.creep.room.find<StructureSpawn | StructureExtension>(FIND_STRUCTURES, {
-            filter: (structure) => {
-                return (structure instanceof StructureSpawn || structure instanceof StructureExtension) &&
-                    structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0;
-            }
+        // 基础工作：优先填充Spawn和Extension
+        const targets = this.creep.room.find<StructureSpawn | StructureExtension>(FIND_STRUCTURES, {
+            filter: s => (s instanceof StructureSpawn || s instanceof StructureExtension) &&
+                s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
         });
 
-        if (spawns_extensions.length > 0) {
-            if (this.moveToTarget(spawns_extensions[0])) {
-                this.creep.transfer(spawns_extensions[0], RESOURCE_ENERGY);
+        if (targets.length) {
+            if (this.moveToTarget(targets[0])) {
+                this.creep.transfer(targets[0], RESOURCE_ENERGY);
             }
         } else {
             // 其次填充Storage
-            const storage = this.creep.room.find<StructureStorage>(FIND_STRUCTURES, {
-                filter: (s) => s.structureType === STRUCTURE_STORAGE
-            });
-
-            if (storage.length > 0) {
-                if (this.moveToTarget(storage[0])) {
-                    this.creep.transfer(storage[0], RESOURCE_ENERGY);
+            const storage = this.creep.room.storage;
+            if (storage && storage.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
+                if (this.moveToTarget(storage)) {
+                    this.creep.transfer(storage, RESOURCE_ENERGY);
                 }
             }
         }
     }
+
     /**
-     * 高级工作，
-     * 1、将能量转移至link
-     * 2、填充container，顺便维修附近的建筑
+     * 高级工作（利用link和维修）
      */
-    workHighLevel(): void {
+    private workHighLevel(): void {
         // 优先将自己身上和container中的能量转移至links
 
         const links = this.creep.pos.findInRange(FIND_MY_STRUCTURES, 1, {
@@ -224,16 +184,14 @@ export class Harvester extends Role {
         });
 
         // 有links则转移
-        if (links.length > 0) {
+        if (links.length) {
             // 有link了，那么寻找container
-            const containers = this.creep.pos.lookFor(LOOK_STRUCTURES);
-            if (containers.length > 0) {
-                // 获取container
-                const container = containers[0];
+            const container = this.creep.pos.lookFor(LOOK_STRUCTURES)
+                .find(s => s.structureType === STRUCTURE_CONTAINER);
+            if (container) {
                 // 获取container中的能量
                 if (container instanceof StructureContainer) {// 类型修正
-                    const energy = container.store.getUsedCapacity(RESOURCE_ENERGY);
-                    if (energy > 0) { // 如果有container中的能量，则转移
+                    if (container.store.getUsedCapacity(RESOURCE_ENERGY) > 0) { // 如果有container中的能量，则转移
                         // 将container中的能量转移至link
                         this.creep.withdraw(container, RESOURCE_ENERGY);
                         this.creep.transfer(links[0], RESOURCE_ENERGY);
@@ -241,28 +199,25 @@ export class Harvester extends Role {
                 }
 
             }
-        } else {
-            //查找附近九格的建筑
+        } else {//查找附近九格的建筑
             // 查找周围1格范围内需要维修的己方建筑结构
             // 筛选条件：建筑当前耐久值小于最大耐久值（即需要维修的建筑）
+            // 对建筑按照血量差值进行排序，第一个是血量差值最大的
             const structures = this.creep.pos.findInRange(FIND_MY_STRUCTURES, 1, {
                 filter: (s) => s.hits < s.hitsMax
-            });
-
-            // 对建筑按照血量差值进行排序，第一个是血量差值最大的
-            structures.sort((a, b) => b.hits - a.hits);
+            }).sort((a, b) => b.hits - a.hits);
 
             // 开始维修
-            if (structures.length > 0) {
+            if (structures.length) {
                 this.creep.repair(structures[0]);
             }
         }
     }
 
     /**
-     * 移动到目标
+     * 移动到目标位置
      */
-    protected moveToTarget(target: { pos: { x: number; y: number; roomName: string } }): boolean {
-        return CreepUtils.moveToTarget(this.creep, target as any);
+    protected moveToTarget(target: { pos: RoomPosition }): boolean {
+        return CreepUtils.moveToTarget(this.creep, target);
     }
 }

@@ -64,7 +64,7 @@ export class SiteToMemory {
         const uniqueSites = this.removeDuplicates(allSites);
         
         // 一次性保存到内存
-        Memory.rooms[this.roomName].site = uniqueSites;
+        Memory.rooms[this.roomName].sites = uniqueSites;
     }
 
     /**
